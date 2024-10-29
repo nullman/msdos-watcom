@@ -1,0 +1,32 @@
+* Watcom GCC Programs for MS-DOS
+
+  See the "Build and Run" sections of [[file:msdos-watcom.org][msdos-watcom.org]] to see how to build, clean,
+  and run these applications using the DOSBox emulator. In general you follow
+  these steps:
+
+  Build with =make=.
+
+  Clean with =make clean=.
+
+  Run with =dosbox NAME.EXE=.
+
+  All files are generated from [[file:msdos-watcom.org][msdos-watcom.org]] using Emacs' org-mode literate
+  programming system to "tangle" them.
+
+  root42's "Let's Code: MS-DOS" series was instrumental in creating these
+  programs.
+
+  Copyright © 2023-2024 Kyle W T Sherman
+
+  License: [[file:LICENSE][MIT License]]
+
+*** [[hello][Hello World]]
+
+    Just prints "Hello World!".
+
+*** [[qixlines][Qix Lines]]
+
+    Draws lines on the screen like the game Qix.
+
+    #+NAME: Qix Lines Video
+    [[file:qixlines/qixlines.mkv][file:qix-lines/qixlines.gif]]

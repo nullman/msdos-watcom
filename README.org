@@ -22,7 +22,7 @@
 
 *** [[hello][Hello World]]
 
-    Just prints "Hello World!".
+    Just prints "Hello, world!".
 
 *** [[qixlines][Qix Lines]]
 

@@ -4,7 +4,7 @@
  * Draw QIX lines with alternating colors.
  */
 
-#include <conio.h>                      // clrscr getch
+#include <conio.h>                      // clrscr getch kbhit
 #include <dos.h>                        // int86 outp inp
 #include <math.h>                       // sin
 #include <stdio.h>                      // printf sprintf
@@ -24,6 +24,8 @@
 #define VGA_256_COLOR_SCREEN_WIDTH 320  // width in pixels of VGA mode 0x13
 #define VGA_256_COLOR_SCREEN_HEIGHT 200 // height in pixels of VGA mode 0x13
 #define VGA_256_COLOR_NUM_COLORS 256    // number of colors in VGA mode 0x13
+#define PALETTE_INDEX 0x3C8             // use to reset palette index
+#define PALETTE_DATA 0x3C9              // use to write colors to palette
 #define INPUT_STATUS 0x3DA              // vga status register
 #define VRTRACE_BIT 0x08                // 1 = vertical retrace, ram access ok for 1.25ms
 #define PI 3.14159265359                // PI
@@ -52,7 +54,7 @@ typedef struct {
 } args_s;
 
 byte far *vga = (byte far *)VIDEO_MEMORY;
-byte vga_mode;
+byte vga_mode, *palette;
 ushort screen_width, screen_height, num_colors;
 
 void wait_for_retrace() {
@@ -76,6 +78,29 @@ void set_mode(byte mode) {
     int86(VIDEO_INT, &regs, &regs);
 }
 
+void set_black_palette() {
+    ushort i;
+
+    outp(PALETTE_INDEX, 0);
+    for (i = 0; i < num_colors * 3; i++) {
+        palette[i] = 0;
+        outp(PALETTE_DATA, 0);
+    }
+}
+
+void set_palette(byte index, byte r, byte g, byte b) {
+    ushort i;
+
+    palette[index * 3 + 0] = r;
+    palette[index * 3 + 1] = g;
+    palette[index * 3 + 2] = b;
+
+    outp(PALETTE_INDEX, 0);
+    for (i = 0; i < num_colors * 3; i++) {
+        outp(PALETTE_DATA, palette[i]);
+    }
+}
+
 byte random_color() {
     if (vga_mode == VGA_256_COLOR_MODE) {
         return rand() % num_colors;
@@ -85,7 +110,32 @@ byte random_color() {
     }
 }
 
-void linecpy(line_s *target_line, line_s *source_line) {
+byte random_neighbor_color() {
+    static byte index = 0;
+    byte prev_r, prev_g, prev_b, r, g, b;
+
+    if (vga_mode != VGA_256_COLOR_MODE) {
+        return random_color();
+    }
+
+    prev_r = palette[index * 3 + 0];
+    prev_g = palette[index * 3 + 1];
+    prev_b = palette[index * 3 + 2];
+
+    // randomly change each color by -1, 0, or 1
+    r = (prev_r + rand() % 3 + 63) % 64;
+    g = (prev_g + rand() % 3 + 63) % 64;
+    b = (prev_b + rand() % 3 + 63) % 64;
+
+    // update next palette slot
+    index = (index + 1) % num_colors;
+    if (index == 0) index = 1;
+    set_palette(index, r, g, b);
+
+    return index;
+}
+
+void line_copy(line_s *target_line, line_s *source_line) {
     target_line->x1 = source_line->x1;
     target_line->y1 = source_line->y1;
     target_line->x2 = source_line->x2;
@@ -154,6 +204,8 @@ double deg_to_rad(ushort degree) {
 }
 
 void next_line(line_s *line, line_s *line_delta, line_s *line_degree) {
+    line->color = random_neighbor_color();
+
     // randomly add to the degrees
     line_degree->x1 = next_degree(line_degree->x1);
     line_degree->y1 = next_degree(line_degree->y1);
@@ -170,42 +222,34 @@ void next_line(line_s *line, line_s *line_delta, line_s *line_degree) {
     if (line->x1 < 0) {
         line->x1 = 0 - line->x1;
         line_delta->x1 = -line_delta->x1;
-        line->color = random_color();
     }
     if (line->x1 >= screen_width) {
         line->x1 = screen_width - (line->x1 - screen_width);
         line_delta->x1 = -line_delta->x1;
-        line->color = random_color();
     }
     if (line->y1 < 0) {
         line->y1 = 0 - line->y1;
         line_delta->y1 = -line_delta->y1;
-        line->color = random_color();
     }
     if (line->y1 >= screen_height) {
         line->y1 = screen_height - (line->y1 - screen_height);
         line_delta->y1 = -line_delta->y1;
-        line->color = random_color();
     }
     if (line->x2 < 0) {
         line->x2 = 0 - line->x2;
         line_delta->x2 = -line_delta->x2;
-        line->color = random_color();
     }
     if (line->x2 >= screen_width) {
         line->x2 = screen_width - (line->x2 - screen_width);
         line_delta->x2 = -line_delta->x2;
-        line->color = random_color();
     }
     if (line->y2 < 0) {
         line->y2 = 0 - line->y2;
         line_delta->y2 = -line_delta->y2;
-        line->color = random_color();
     }
     if (line->y2 >= screen_height) {
         line->y2 = screen_height - (line->y2 - screen_height);
         line_delta->y2 = -line_delta->y2;
-        line->color = random_color();
     }
 }
 
@@ -233,7 +277,7 @@ void draw_lines() {
 
     // initialize history
     for (i = 0; i < HISTORY_SIZE; i++) {
-        linecpy(&line_history[i], &line);
+        line_copy(&line_history[i], &line);
     }
     history_index = 0;
 
@@ -251,7 +295,7 @@ void draw_lines() {
         draw_line(&line_history[history_index]);
 
         // add to history
-        linecpy(&line_history[history_index++], &line);
+        line_copy(&line_history[history_index++], &line);
         if (history_index >= HISTORY_SIZE) history_index = 0;
     }
 
@@ -300,6 +344,10 @@ int main(int argc, char *argv[]) {
     }
 
     set_mode(vga_mode);
+
+    palette = malloc(VGA_256_COLOR_NUM_COLORS * 3 * sizeof(byte));
+
+    set_black_palette();
 
     draw_lines();
 
